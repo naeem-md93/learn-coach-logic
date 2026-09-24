@@ -1,5 +1,8 @@
 """Title extraction from leading page text, via LangChain + Gemini."""
 
+import logging
+import time
+
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -9,7 +12,10 @@ from pydantic import Field
 from lc_logic.core.config import GEMINI_SETTINGS
 from lc_logic.core.config import GOOGLE_SETTINGS
 
+logger = logging.getLogger(__name__)
+
 FALLBACK_TITLE = "Untitled Resource"
+DEBUG_PREVIEW_CHARS = 300
 
 
 class TitleExtractionError(Exception):
@@ -67,15 +73,44 @@ async def extract_title(leading_text: str) -> str:
     an HTTP error so Django can apply its own fallback.
     """
     if not leading_text.strip():
+        logger.info("No leading text extracted; skipping Gemini call, using fallback title.")
         return FALLBACK_TITLE
 
+    if logger.isEnabledFor(logging.DEBUG):
+        preview = leading_text[:DEBUG_PREVIEW_CHARS].replace("\n", " ")
+        suffix = "..." if len(leading_text) > DEBUG_PREVIEW_CHARS else ""
+        logger.debug("Leading text preview sent to Gemini: %r%s", preview, suffix)
+
     chain = _build_chain()
+
+    logger.info("Calling Gemini model=%s for title extraction", GEMINI_SETTINGS.TITLE_MODEL)
+    start = time.perf_counter()
     try:
         result = await chain.ainvoke({"leading_text": leading_text})
     except TitleExtractionError:
+        duration_ms = (time.perf_counter() - start) * 1000
+        logger.warning(
+            "Gemini call failed before dispatch (model=%s, %.1fms)",
+            GEMINI_SETTINGS.TITLE_MODEL,
+            duration_ms,
+        )
         raise
     except Exception as exc:
+        duration_ms = (time.perf_counter() - start) * 1000
+        logger.warning(
+            "Gemini call failed (model=%s, %.1fms): %s",
+            GEMINI_SETTINGS.TITLE_MODEL,
+            duration_ms,
+            exc,
+        )
         raise TitleExtractionError(f"Gemini title extraction failed: {exc}") from exc
 
+    duration_ms = (time.perf_counter() - start) * 1000
+    logger.info(
+        "Gemini call succeeded (model=%s, %.1fms)", GEMINI_SETTINGS.TITLE_MODEL, duration_ms
+    )
+
     title = (result.title or "").strip()
-    return title or FALLBACK_TITLE
+    title = title or FALLBACK_TITLE
+    logger.info("Extracted title: %r", title)
+    return title
