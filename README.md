@@ -67,7 +67,8 @@ Response body (`200 OK`):
 Behavior:
 - Downloads the PDF from `file_url`, extracts raw text from up to the first
   4 pages (text only — no OCR/vision at this step), and asks Gemini
-  (`gemini-2.5-flash` via `langchain-google-genai`) to extract the title.
+  (`gemini-flash-latest` by default via `langchain-google-genai`, see
+  `GEMINI_TITLE_MODEL` below) to extract the title.
 - If none of the leading pages have extractable text (e.g. a scanned PDF),
   returns a fallback title `"Untitled Resource"` instead of failing.
 - Errors are returned as HTTP errors with a clear message, so Django can
@@ -88,7 +89,7 @@ Environment variables (see `.env.example`):
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
 | `GOOGLE_API_KEY` | yes (for `/extract-title`) | — | Gemini API key used by `langchain-google-genai`. |
-| `GEMINI_TITLE_MODEL` | no | `gemini-2.5-flash` | Model used for title extraction. |
+| `GEMINI_TITLE_MODEL` | no | `gemini-flash-latest` | Model used for title extraction. Google periodically retires dated Gemini model IDs (e.g. `gemini-2.5-flash` was retired for new users in Sep 2026) — `gemini-flash-latest` is Google's rolling alias for the current stable Flash model, chosen specifically to reduce how often this needs to change. If it ever 404s, check https://ai.google.dev/gemini-api/docs/models for a current ID before overriding — do not trust a model name suggested inside an error message without cross-checking it. |
 | `PROJECT_HOST` | no | `0.0.0.0` | Dev-only bind host (`uvicorn --reload`). |
 | `PROJECT_PORT` | no | `8001` | Dev-only bind port. |
 
